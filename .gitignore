@@ -1,0 +1,9 @@
+target/
+bin/
+"Nova pasta"/
+.vscode/
+.github/modernize/
+cookie*.txt
+db/*.mv.db
+db/*.trace.db
+*.class
