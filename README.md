@@ -21,7 +21,7 @@ Abra `http://localhost:8080` no navegador. Mantenha o terminal aberto enquanto u
 Por padrao, o servidor tambem aceita conexoes de outros dispositivos na mesma rede Wi-Fi:
 
 1. No Windows, execute `ipconfig` e localize o **Endereco IPv4** da conexao Wi-Fi ou Ethernet ativa.
-2. No outro dispositivo conectado a mesma rede, abra `http://IP-DO-COMPUTADOR:8080`, substituindo pelo IPv4 encontrado (por exemplo, `http://192.168.1.25:8080`).
+2. No outro dispositivo conectado a mesma rede, abra `http://IP-DO-COMPUTADOR:8080`, substituindo pelo IPv4 encontrado (por exemplo, `http://<IP.DO.COMPUTADOR>:8080`).
 3. Se o Windows perguntar, permita o acesso ao Java apenas em redes privadas. Se necessario, crie uma regra de entrada no Firewall do Windows para a porta TCP `8080` em redes privadas.
 
 Isso permite acesso somente onde a rede e o firewall permitem; nao configure encaminhamento de portas no roteador para expor a loja a internet. Para alterar a porta, defina `ECOMMERCE_PORT` antes de iniciar o Maven. Para limitar novamente o servidor ao proprio computador, defina `ECOMMERCE_BIND_ADDRESS` como `127.0.0.1`.
