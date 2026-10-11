@@ -7,8 +7,11 @@ import com.example.ecommerce.security.PasswordHasher;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Base64;
+import java.security.SecureRandom;
 
 public class UserService {
+    private static final SecureRandom RANDOM = new SecureRandom();
     private final UserRepository userRepository;
 
     public UserService(UserRepository userRepository) {
@@ -90,6 +93,27 @@ public class UserService {
 
     public void deleteUser(Long id) {
         userRepository.deleteById(id);
+    }
+
+    public void deleteAccount(Long id, String password) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Conta nao encontrada."));
+        if (authenticate(user.getEmail(), password).filter(authenticated -> authenticated.getId().equals(id))
+                .isEmpty()) {
+            throw new IllegalArgumentException("A senha informada esta incorreta.");
+        }
+        anonymizeAccount(id);
+    }
+
+    public void anonymizeAccount(Long id) {
+        if (id == null || userRepository.findById(id).isEmpty()) {
+            throw new IllegalArgumentException("Conta nao encontrada.");
+        }
+        byte[] randomBytes = new byte[32];
+        RANDOM.nextBytes(randomBytes);
+        userRepository.anonymizeById(id, "Conta excluida #" + id,
+                "excluida-" + id + "@deleted.invalid",
+                PasswordHasher.hash(Base64.getEncoder().encodeToString(randomBytes)));
     }
 
     private boolean isValidCpf(String cpf) {

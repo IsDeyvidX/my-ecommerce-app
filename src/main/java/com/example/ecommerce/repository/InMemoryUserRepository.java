@@ -52,4 +52,17 @@ public class InMemoryUserRepository implements UserRepository {
     public void deleteById(Long id) {
         users.remove(id);
     }
+
+    @Override
+    public void anonymizeById(Long id, String username, String email, String passwordHash) {
+        User user = users.get(id);
+        if (user == null) {
+            throw new IllegalArgumentException("Conta nao encontrada.");
+        }
+        user.setUsername(username);
+        user.setEmail(email);
+        user.setPassword(passwordHash);
+        user.setCpf(null);
+        user.setRole("CUSTOMER");
+    }
 }

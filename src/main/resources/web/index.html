@@ -348,6 +348,14 @@
         .account-tabs { display: flex; gap: 8px; margin: 14px 0 20px; }
         .account-tabs button { flex: 1; }
         .account-tabs button[aria-selected="true"] { border-color: var(--blue); background: #14284a; color: #bfdbfe; }
+        .admin-tabs { max-width: 420px; }
+        .admin-user-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; align-items: center; gap: 14px; padding: 14px; border-bottom: 1px solid var(--line); font-size: 12px; }
+        .admin-user-row span { overflow-wrap: anywhere; }
+        .danger-button { border: 1px solid #7f1d1d; border-radius: 99px; background: #35131a; color: #fecaca; padding: 8px 12px; font-size: 11px; }
+        .danger-button:hover { background: #521923; }
+        .account-danger-zone { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
+        .account-danger-zone h3 { margin: 0 0 6px; }
+        .account-danger-zone p { color: var(--muted); font-size: 12px; line-height: 1.5; }
         .form-grid { display: grid; gap: 13px; }
         .form-grid label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 650; }
         .form-grid input, .form-grid textarea {
@@ -432,6 +440,9 @@
             .stock-label { font-size: 9px; }
             .admin-product-row { grid-template-columns: 48px minmax(0, 1fr) auto; }
             .admin-product-row .admin-price, .admin-product-row .admin-stock { display: none; }
+            .admin-user-row { grid-template-columns: minmax(0, 1fr) auto; }
+            .admin-user-row .admin-user-email { grid-column: 1; }
+            .admin-user-row .admin-user-role { grid-column: 1; }
             .dialog { padding: 19px; }
         }
     </style>
@@ -503,6 +514,11 @@
                     <p>Cadastre produtos novos com foto, descricao, preco e estoque.</p>
                 </div>
             </div>
+            <div class="account-tabs admin-tabs" role="tablist" aria-label="Secoes do painel administrativo">
+                <button class="secondary-button" id="admin-products-tab" type="button" aria-selected="true">Produtos</button>
+                <button class="secondary-button" id="admin-users-tab" type="button" aria-selected="false">Contas</button>
+            </div>
+            <section id="admin-products-panel">
             <form class="form-grid" id="product-form">
                 <input name="id" type="hidden">
                 <label>Nome do produto<input name="name" type="text" maxlength="150" required></label>
@@ -521,6 +537,13 @@
             </form>
             <h2>Produtos cadastrados</h2>
             <div class="admin-products" id="admin-products"></div>
+            </section>
+            <section id="admin-users-panel" hidden>
+                <h2>Contas de clientes</h2>
+                <p class="payment-note">Ao excluir uma conta, os dados pessoais e enderecos de entrega sao removidos. O historico dos pedidos e mantido.</p>
+                <div class="admin-products" id="admin-users"></div>
+                <p class="form-message" id="admin-users-message" role="status"></p>
+            </section>
         </section>
     </main>
 
@@ -554,19 +577,19 @@
                 <button class="primary-button" type="submit">Criar minha conta</button>
                 <p class="form-message" id="register-message" role="status"></p>
             </form>
-            <form class="form-grid" id="email-verification-form" hidden>
-                <p class="payment-note" id="verification-message"></p>
-                <label>Codigo de verificacao<input name="code" type="text" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="one-time-code" required></label>
-                <button class="primary-button" type="submit">Verificar e entrar</button>
-                <button class="secondary-button" id="verification-back" type="button">Voltar ao login</button>
-                <p class="form-message" id="verification-error" role="status"></p>
-            </form>
         </div>
         <div id="signed-in-panel" hidden>
             <div class="account-info" id="account-info"></div>
             <h3>Seus pedidos</h3>
             <ul class="history-list" id="order-history"></ul>
             <p class="form-message" id="history-message" role="status"></p>
+            <form class="form-grid account-danger-zone" id="delete-account-form">
+                <h3>Excluir minha conta</h3>
+                <p>Seus dados pessoais e enderecos serao removidos. Os itens e valores dos pedidos permanecerao no historico, sem identificacao pessoal.</p>
+                <label>Confirme sua senha<input name="password" type="password" maxlength="200" autocomplete="current-password" required></label>
+                <button class="danger-button" type="submit">Excluir minha conta</button>
+                <p class="form-message" id="delete-account-message" role="status"></p>
+            </form>
             <button class="secondary-button" id="logout-button" type="button">Sair da conta</button>
         </div>
     </dialog>
@@ -601,7 +624,6 @@
         const icons = ["🪴", "☕", "🎧", "✨", "🧺", "🕯️"];
         let products = [];
         let account = null;
-        let verificationChallengeId = null;
         let cartRestored = false;
         let toastTimer;
         const cart = new Map();
@@ -642,26 +664,12 @@
 
         function setAccountTab(tab) {
             const loginSelected = tab === "login";
-            verificationChallengeId = null;
             document.getElementById("login-form").hidden = !loginSelected;
             document.getElementById("register-form").hidden = loginSelected;
-            document.getElementById("email-verification-form").hidden = true;
             document.getElementById("login-tab").setAttribute("aria-selected", String(loginSelected));
             document.getElementById("register-tab").setAttribute("aria-selected", String(!loginSelected));
             document.getElementById("login-message").textContent = "";
             document.getElementById("register-message").textContent = "";
-            document.getElementById("verification-error").textContent = "";
-        }
-
-        function beginEmailVerification(result, email) {
-            verificationChallengeId = result.challengeId;
-            document.getElementById("login-form").hidden = true;
-            document.getElementById("register-form").hidden = true;
-            document.getElementById("email-verification-form").hidden = false;
-            document.getElementById("verification-message").textContent =
-                `Enviamos um codigo para ${email}. O codigo expira em 10 minutos.`;
-            document.getElementById("verification-error").textContent = "";
-            document.querySelector("#email-verification-form input[name='code']").focus();
         }
 
         function showStoreView() {
@@ -681,9 +689,22 @@
             document.getElementById("admin-view").hidden = false;
             document.getElementById("store-open").hidden = false;
             window.history.replaceState(null, "", "/#admin");
-            await loadAdminProducts();
-            productForm.elements.name.focus();
+            await setAdminTab("products");
             window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+
+        async function setAdminTab(tab) {
+            const productsSelected = tab === "products";
+            document.getElementById("admin-products-tab").setAttribute("aria-selected", String(productsSelected));
+            document.getElementById("admin-users-tab").setAttribute("aria-selected", String(!productsSelected));
+            document.getElementById("admin-products-panel").hidden = !productsSelected;
+            document.getElementById("admin-users-panel").hidden = productsSelected;
+            if (productsSelected) {
+                await loadAdminProducts();
+                productForm.elements.name.focus();
+            } else {
+                await loadAdminUsers();
+            }
         }
 
         async function refreshAccount() {
@@ -901,6 +922,8 @@
         });
         document.getElementById("admin-open").addEventListener("click", showAdminView);
         document.getElementById("store-open").addEventListener("click", showStoreView);
+        document.getElementById("admin-products-tab").addEventListener("click", () => setAdminTab("products"));
+        document.getElementById("admin-users-tab").addEventListener("click", () => setAdminTab("users"));
         document.getElementById("login-tab").addEventListener("click", () => setAccountTab("login"));
         document.getElementById("register-tab").addEventListener("click", () => setAccountTab("register"));
         document.querySelectorAll("[data-close]").forEach((button) =>
@@ -919,7 +942,11 @@
                     body: JSON.stringify(credentials)
                 });
                 form.elements.password.value = "";
-                beginEmailVerification(result, credentials.email);
+                account = result;
+                accountDialog.close();
+                await refreshAccount();
+                showToast(`Bem-vindo(a), ${account.name}!`);
+                if (account.role === "ADMIN") await showAdminView();
             } catch (error) { message.textContent = error.message; }
         });
 
@@ -935,34 +962,33 @@
                     body: JSON.stringify(registration)
                 });
                 form.reset();
-                beginEmailVerification(result, registration.email);
-            } catch (error) { message.textContent = error.message; }
-        });
-
-        document.getElementById("email-verification-form").addEventListener("submit", async (event) => {
-            event.preventDefault();
-            const form = event.currentTarget;
-            const errorMessage = document.getElementById("verification-error");
-            errorMessage.textContent = "";
-            try {
-                const result = await api("/api/auth/verify-email", {
-                    method: "POST",
-                    body: JSON.stringify({
-                        challengeId: verificationChallengeId,
-                        code: form.elements.code.value
-                    })
-                });
-                form.reset();
-                verificationChallengeId = null;
                 account = result;
                 accountDialog.close();
                 await refreshAccount();
-                showToast(`Bem-vindo(a), ${account.name}!`);
+                showToast(`Conta criada. Bem-vindo(a), ${account.name}!`);
                 if (account.role === "ADMIN") await showAdminView();
-            } catch (error) { errorMessage.textContent = error.message; }
+            } catch (error) { message.textContent = error.message; }
         });
 
-        document.getElementById("verification-back").addEventListener("click", () => setAccountTab("login"));
+        document.getElementById("delete-account-form").addEventListener("submit", async (event) => {
+            event.preventDefault();
+            if (!window.confirm("Excluir esta conta? Os pedidos serao mantidos sem seus dados pessoais.")) return;
+            const form = event.currentTarget;
+            const message = document.getElementById("delete-account-message");
+            message.textContent = "";
+            try {
+                await api("/api/me", {
+                    method: "DELETE",
+                    body: JSON.stringify({ password: form.elements.password.value })
+                });
+                account = null;
+                form.reset();
+                accountDialog.close();
+                showStoreView();
+                await refreshAccount();
+                showToast("Conta excluida. O historico de pedidos foi mantido sem seus dados pessoais.");
+            } catch (error) { message.textContent = error.message; }
+        });
 
         document.getElementById("logout-button").addEventListener("click", async () => {
             await api("/api/auth/logout", { method: "POST" });
@@ -1006,6 +1032,26 @@
                     </div>`).join("") : '<p class="form-message">Ainda nao ha produtos no catalogo.</p>';
             } catch (error) {
                 list.innerHTML = `<p class="form-message">${escapeHtml(error.message)}</p>`;
+            }
+        }
+
+        async function loadAdminUsers() {
+            const list = document.getElementById("admin-users");
+            const message = document.getElementById("admin-users-message");
+            message.textContent = "";
+            try {
+                const users = await api("/api/admin/users");
+                const customers = users.filter((user) => user.role === "CUSTOMER");
+                list.innerHTML = customers.length ? customers.map((user) => `
+                    <div class="admin-user-row">
+                        <strong>${escapeHtml(user.name)}</strong>
+                        <span class="admin-user-email">${escapeHtml(user.email)}</span>
+                        <span class="admin-user-role">Cliente</span>
+                        <button class="danger-button" type="button" data-delete-user="${user.id}">Excluir conta</button>
+                    </div>`).join("") : '<p class="form-message">Ainda nao ha contas de clientes.</p>';
+            } catch (error) {
+                message.textContent = error.message;
+                list.replaceChildren();
             }
         }
 
@@ -1109,6 +1155,17 @@
                     showToast("Produto excluido.");
                 } catch (error) { showToast(error.message); }
             }
+        });
+        document.getElementById("admin-users").addEventListener("click", async (event) => {
+            const deleteButton = event.target.closest("[data-delete-user]");
+            if (!deleteButton || !window.confirm("Excluir esta conta e remover os dados pessoais? Os pedidos permanecerao anonimizados.")) {
+                return;
+            }
+            try {
+                await api(`/api/admin/users/${deleteButton.dataset.deleteUser}`, { method: "DELETE" });
+                await loadAdminUsers();
+                showToast("Conta excluida e dados pessoais removidos.");
+            } catch (error) { document.getElementById("admin-users-message").textContent = error.message; }
         });
 
         document.addEventListener("click", (event) => {

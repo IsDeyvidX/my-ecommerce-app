@@ -57,5 +57,9 @@ class UserServiceTest {
         @Override
         public void deleteById(Long id) {
         }
+
+        @Override
+        public void anonymizeById(Long id, String username, String email, String passwordHash) {
+        }
     }
 }

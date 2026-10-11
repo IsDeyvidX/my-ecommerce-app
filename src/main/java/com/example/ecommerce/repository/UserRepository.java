@@ -12,4 +12,5 @@ public interface UserRepository {
     void updatePassword(Long id, String passwordHash);
     User save(User user);
     void deleteById(Long id);
+    void anonymizeById(Long id, String username, String email, String passwordHash);
 }

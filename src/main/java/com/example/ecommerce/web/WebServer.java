@@ -3,7 +3,6 @@ package com.example.ecommerce.web;
 import com.example.ecommerce.model.Product;
 import com.example.ecommerce.model.User;
 import com.example.ecommerce.repository.JdbcOrderRepository;
-import com.example.ecommerce.security.EmailCodeService;
 import com.example.ecommerce.service.ProductService;
 import com.example.ecommerce.service.UserService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -32,6 +31,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class WebServer {
     private static final int PORT = Integer.parseInt(System.getenv().getOrDefault("ECOMMERCE_PORT", "8080"));
+    private static final String BIND_ADDRESS = System.getenv()
+            .getOrDefault("ECOMMERCE_BIND_ADDRESS", "0.0.0.0");
     private static final int MAX_REQUEST_BYTES = 65_536;
     private static final int MAX_PRODUCT_REQUEST_BYTES = 3_000_000;
     private static final int MAX_PRODUCT_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -50,25 +51,29 @@ public final class WebServer {
     }
 
     public static void start(ProductService productService, UserService userService,
-                             JdbcOrderRepository orderRepository,
-                             EmailCodeService emailCodeService) throws IOException {
-        start(productService, userService, orderRepository, emailCodeService, PORT);
+                             JdbcOrderRepository orderRepository) throws IOException {
+        start(productService, userService, orderRepository, BIND_ADDRESS, PORT);
     }
 
     public static HttpServer start(ProductService productService, UserService userService,
-                                   JdbcOrderRepository orderRepository, EmailCodeService emailCodeService,
+                                   JdbcOrderRepository orderRepository,
                                    int port) throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
+        return start(productService, userService, orderRepository, "127.0.0.1", port);
+    }
+
+    static HttpServer start(ProductService productService, UserService userService,
+                            JdbcOrderRepository orderRepository,
+                            String bindAddress, int port) throws IOException {
+        HttpServer server = HttpServer.create(new InetSocketAddress(bindAddress, port), 0);
         server.createContext("/", exchange -> handleRequest(
-                exchange, productService, userService, orderRepository, emailCodeService));
+                exchange, productService, userService, orderRepository));
         server.start();
         return server;
     }
 
     private static void handleRequest(HttpExchange exchange, ProductService productService,
                                       UserService userService,
-                                      JdbcOrderRepository orderRepository,
-                                      EmailCodeService emailCodeService) throws IOException {
+                                      JdbcOrderRepository orderRepository) throws IOException {
         try {
             String path = exchange.getRequestURI().getPath();
             String method = exchange.getRequestMethod();
@@ -90,15 +95,11 @@ public final class WebServer {
                 return;
             }
             if ("/api/auth/register".equals(path) && "POST".equals(method)) {
-                register(exchange, userService, emailCodeService);
+                register(exchange, userService);
                 return;
             }
             if ("/api/auth/login".equals(path) && "POST".equals(method)) {
-                login(exchange, userService, emailCodeService);
-                return;
-            }
-            if ("/api/auth/verify-email".equals(path) && "POST".equals(method)) {
-                verifyEmail(exchange, userService, emailCodeService);
+                login(exchange, userService);
                 return;
             }
             if ("/api/auth/logout".equals(path) && "POST".equals(method)) {
@@ -109,8 +110,20 @@ public final class WebServer {
                 currentAccount(exchange, userService);
                 return;
             }
+            if ("/api/me".equals(path) && "DELETE".equals(method)) {
+                deleteCurrentAccount(exchange, userService);
+                return;
+            }
             if ("/api/orders".equals(path)) {
                 orders(exchange, method, userService, orderRepository);
+                return;
+            }
+            if ("/api/admin/users".equals(path) && "GET".equals(method)) {
+                listAdminUsers(exchange, userService);
+                return;
+            }
+            if (path.matches("^/api/admin/users/\\d+$") && "DELETE".equals(method)) {
+                deleteAdminUser(exchange, path, userService);
                 return;
             }
             if ("/api/admin/products".equals(path)
@@ -123,8 +136,6 @@ public final class WebServer {
             sendError(exchange, 401, exception.getMessage());
         } catch (ForbiddenException exception) {
             sendError(exchange, 403, exception.getMessage());
-        } catch (EmailCodeService.DeliveryException exception) {
-            sendError(exchange, 503, exception.getMessage());
         } catch (IllegalArgumentException exception) {
             sendError(exchange, 400, exception.getMessage());
         } catch (IOException exception) {
@@ -143,12 +154,13 @@ public final class WebServer {
 
     private static boolean isAllowedOrigin(HttpExchange exchange) {
         String origin = exchange.getRequestHeaders().getFirst("Origin");
+        String requestHost = exchange.getRequestHeaders().getFirst("Host");
         return origin == null || origin.equals("http://localhost:" + PORT)
-                || origin.equals("http://127.0.0.1:" + PORT);
+                || origin.equals("http://127.0.0.1:" + PORT)
+                || requestHost != null && origin.equalsIgnoreCase("http://" + requestHost);
     }
 
-    private static void register(HttpExchange exchange, UserService userService,
-                                 EmailCodeService emailCodeService) throws IOException {
+    private static void register(HttpExchange exchange, UserService userService) throws IOException {
         JsonNode body = readJson(exchange);
         User user = new User();
         user.setUsername(requiredText(body, "name", 100));
@@ -156,30 +168,16 @@ public final class WebServer {
         user.setCpf(requiredText(body, "cpf", 30));
         user.setPassword(requiredPassword(body));
         User registered = userService.registerUser(user);
-        String challengeId = emailCodeService.sendCode(registered);
-        sendJson(exchange, 202, Map.of("verificationRequired", true, "challengeId", challengeId));
+        createSession(exchange, registered);
+        sendJson(exchange, 201, accountJson(registered));
     }
 
-    private static void login(HttpExchange exchange, UserService userService,
-                              EmailCodeService emailCodeService) throws IOException {
+    private static void login(HttpExchange exchange, UserService userService) throws IOException {
         JsonNode body = readJson(exchange);
         String email = requiredText(body, "email", 255);
         String password = requiredPassword(body);
         User user = userService.authenticate(email, password)
                 .orElseThrow(() -> new NotAuthorizedException("Email ou senha incorretos."));
-        String challengeId = emailCodeService.sendCode(user);
-        sendJson(exchange, 202, Map.of("verificationRequired", true, "challengeId", challengeId));
-    }
-
-    private static void verifyEmail(HttpExchange exchange, UserService userService,
-                                    EmailCodeService emailCodeService) throws IOException {
-        JsonNode body = readJson(exchange);
-        String challengeId = requiredText(body, "challengeId", 100);
-        String code = requiredText(body, "code", 6);
-        long userId = emailCodeService.verify(challengeId, code)
-                .orElseThrow(() -> new NotAuthorizedException("Codigo invalido ou expirado. Faca login novamente."));
-        User user = userService.getUserById(userId)
-                .orElseThrow(() -> new NotAuthorizedException("Conta nao encontrada. Faca login novamente."));
         createSession(exchange, user);
         sendJson(exchange, 200, accountJson(user));
     }
@@ -201,6 +199,61 @@ public final class WebServer {
             return;
         }
         sendJson(exchange, 200, accountJson(user));
+    }
+
+    private static void deleteCurrentAccount(HttpExchange exchange, UserService userService) throws IOException {
+        User user = requireUser(exchange, userService);
+        JsonNode body = readJson(exchange);
+        userService.deleteAccount(user.getId(), requiredPassword(body));
+        invalidateUserSessions(user.getId());
+        exchange.getResponseHeaders().add("Set-Cookie",
+                SESSION_COOKIE + "=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
+        sendJson(exchange, 200, Map.of("deleted", true));
+    }
+
+    private static void listAdminUsers(HttpExchange exchange, UserService userService) throws IOException {
+        requireAdmin(exchange, userService);
+        List<Map<String, Object>> users = userService.getAllUsers().stream()
+                .map(user -> Map.<String, Object>of(
+                        "id", user.getId(),
+                        "name", user.getUsername(),
+                        "email", user.getEmail(),
+                        "role", user.getRole()))
+                .toList();
+        sendJson(exchange, 200, users);
+    }
+
+    private static void deleteAdminUser(HttpExchange exchange, String path, UserService userService)
+            throws IOException {
+        User admin = requireAdmin(exchange, userService);
+        long userId = parseUserId(path);
+        if (admin.getId().equals(userId)) {
+            throw new IllegalArgumentException("Nao e possivel excluir a propria conta por este painel.");
+        }
+        User target = userService.getUserById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Conta nao encontrada."));
+        if (!"CUSTOMER".equals(target.getRole())) {
+            throw new IllegalArgumentException("O painel permite excluir somente contas de clientes.");
+        }
+        userService.anonymizeAccount(userId);
+        invalidateUserSessions(userId);
+        sendJson(exchange, 200, Map.of("deleted", true));
+    }
+
+    private static long parseUserId(String path) {
+        try {
+            long id = Long.parseLong(path.substring(path.lastIndexOf('/') + 1));
+            if (id <= 0) {
+                throw new NumberFormatException();
+            }
+            return id;
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("O identificador da conta e invalido.");
+        }
+    }
+
+    private static void invalidateUserSessions(long userId) {
+        SESSIONS.entrySet().removeIf(entry -> entry.getValue().userId() == userId);
     }
 
     private static ObjectNode accountJson(User user) {

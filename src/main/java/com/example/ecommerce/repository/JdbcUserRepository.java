@@ -118,6 +118,34 @@ public class JdbcUserRepository implements UserRepository {
         }
     }
 
+    @Override
+    public void anonymizeById(Long id, String username, String email, String passwordHash) {
+        try (Connection connection = Database.getConnection()) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement orders = connection.prepareStatement(
+                         "UPDATE orders SET delivery_address = 'Endereco removido pelo titular' WHERE user_id = ?");
+                 PreparedStatement user = connection.prepareStatement(
+                         "UPDATE users SET username = ?, email = ?, password = ?, cpf = NULL, role = 'CUSTOMER' "
+                                 + "WHERE id = ?")) {
+                orders.setLong(1, id);
+                orders.executeUpdate();
+                user.setString(1, username);
+                user.setString(2, email);
+                user.setString(3, passwordHash);
+                user.setLong(4, id);
+                if (user.executeUpdate() != 1) {
+                    throw new IllegalArgumentException("Conta nao encontrada.");
+                }
+                connection.commit();
+            } catch (SQLException | RuntimeException exception) {
+                connection.rollback();
+                throw exception;
+            }
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Could not anonymize account " + id + ".", exception);
+        }
+    }
+
     private User insert(User user) {
         String sql = "INSERT INTO users (username, email, password, cpf, role) VALUES (?, ?, ?, ?, ?)";
         try (Connection connection = Database.getConnection();
