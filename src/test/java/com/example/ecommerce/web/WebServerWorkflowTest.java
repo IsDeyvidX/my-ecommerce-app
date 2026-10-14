@@ -113,9 +113,61 @@ class WebServerWorkflowTest {
 
             JsonNode customerAccount = getJson(client, baseUrl + "/api/me", customerCookie, 200);
             long customerId = customerAccount.path("id").asLong();
-            orderRepository.create(customerId,
-                    Map.of(productService.getAllProducts().get(0).getId(), 1),
-                    "PIX", "Rua particular, 123");
+            Map<String, Object> cashOrder = Map.of(
+                    "paymentMethod", "DINHEIRO",
+                    "deliveryAddress", "Rua particular, 123, Centro",
+                    "customerPhone", "(79) 99999-9999",
+                    "cashNeedsChange", true,
+                    "cashAmount", 40.00,
+                    "items", java.util.List.of(Map.of("productId", productId, "quantity", 1)));
+            requestJson(client, baseUrl + "/api/orders", JSON.writeValueAsString(cashOrder),
+                    customerCookie, "POST", 400);
+            Map<String, Object> validCashOrder = new java.util.HashMap<>(cashOrder);
+            validCashOrder.put("cashAmount", 50.00);
+            JsonNode createdOrder = postJson(client, baseUrl + "/api/orders",
+                    JSON.writeValueAsString(validCashOrder), customerCookie, 201);
+            assertTrue(createdOrder.path("id").asLong() > 0);
+
+            HttpResponse<String> customerOrders = client.send(HttpRequest.newBuilder()
+                            .uri(URI.create(baseUrl + "/api/admin/orders"))
+                            .header("Cookie", customerCookie)
+                            .GET().build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(403, customerOrders.statusCode());
+
+            JsonNode pendingCount = getJson(client, baseUrl + "/api/admin/orders/unread-count", adminCookie, 200);
+            assertEquals(1, pendingCount.path("count").asInt());
+            JsonNode adminOrders = getJson(client, baseUrl + "/api/admin/orders", adminCookie, 200);
+            JsonNode savedOrder = adminOrders.get(0);
+            assertEquals("Cliente", savedOrder.path("customerName").asText());
+            assertEquals("cliente@example.com", savedOrder.path("customerEmail").asText());
+            assertEquals("79999999999", savedOrder.path("customerPhone").asText());
+            assertEquals("Rua particular, 123, Centro", savedOrder.path("deliveryAddress").asText());
+            assertEquals("DINHEIRO", savedOrder.path("paymentMethod").asText());
+            assertTrue(savedOrder.path("cashNeedsChange").asBoolean());
+            assertEquals(50.00, savedOrder.path("cashAmount").asDouble(), 0.001);
+            assertEquals(5.10, savedOrder.path("changeDue").asDouble(), 0.001);
+            assertEquals("Produto editado", savedOrder.path("items").get(0).path("name").asText());
+            assertTrue(savedOrder.path("notificationPending").asBoolean());
+            postJson(client, baseUrl + "/api/admin/orders/mark-seen",
+                    JSON.writeValueAsString(Map.of("orderIds", java.util.List.of(savedOrder.path("id").asLong()))),
+                    adminCookie, 200);
+            assertEquals(0, getJson(client, baseUrl + "/api/admin/orders/unread-count",
+                    adminCookie, 200).path("count").asInt());
+
+            Map<String, Object> cardOrder = Map.of(
+                    "paymentMethod", "CARTAO",
+                    "deliveryAddress", "Rua do cartao, 456",
+                    "customerPhone", "79999999999",
+                    "items", java.util.List.of(Map.of("productId", productId, "quantity", 1)));
+            requestJson(client, baseUrl + "/api/orders", JSON.writeValueAsString(cardOrder),
+                    customerCookie, "POST", 400);
+            Map<String, Object> validCardOrder = new java.util.HashMap<>(cardOrder);
+            validCardOrder.put("cardType", "CREDITO");
+            postJson(client, baseUrl + "/api/orders", JSON.writeValueAsString(validCardOrder),
+                    customerCookie, 201);
+            JsonNode savedCardOrder = getJson(client, baseUrl + "/api/admin/orders", adminCookie, 200).get(0);
+            assertEquals("CREDITO", savedCardOrder.path("cardType").asText());
 
             User adminDeletedCustomer = userService.registerUser(
                     user("Cliente removido pelo admin", "removido@example.com", "935.411.347-80"));
@@ -149,6 +201,7 @@ class WebServerWorkflowTest {
             JdbcOrderRepository.OrderSummary retainedOrder =
                     orderRepository.findByUserId(customerId).get(0);
             assertEquals("Endereco removido pelo titular", retainedOrder.deliveryAddress());
+            assertTrue(retainedOrder.customerPhone() == null);
 
             HttpResponse<String> deletedSession = client.send(HttpRequest.newBuilder()
                             .uri(URI.create(baseUrl + "/api/me"))

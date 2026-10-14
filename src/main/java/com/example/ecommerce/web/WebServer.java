@@ -118,6 +118,35 @@ public final class WebServer {
                 orders(exchange, method, userService, orderRepository);
                 return;
             }
+            if ("/api/admin/orders".equals(path) && "GET".equals(method)) {
+                requireAdmin(exchange, userService);
+                sendJson(exchange, 200, orderRepository.findAllForAdmin());
+                return;
+            }
+            if ("/api/admin/orders/unread-count".equals(path) && "GET".equals(method)) {
+                requireAdmin(exchange, userService);
+                sendJson(exchange, 200, Map.of(
+                        "count", orderRepository.countPendingAdminNotifications()));
+                return;
+            }
+            if ("/api/admin/orders/mark-seen".equals(path) && "POST".equals(method)) {
+                requireAdmin(exchange, userService);
+                JsonNode body = readJson(exchange);
+                JsonNode orderIds = body.get("orderIds");
+                if (orderIds == null || !orderIds.isArray() || orderIds.size() > 5000) {
+                    throw new IllegalArgumentException("A lista de pedidos a marcar como lidos e invalida.");
+                }
+                List<Long> ids = new java.util.ArrayList<>();
+                for (JsonNode orderId : orderIds) {
+                    if (!orderId.canConvertToLong() || orderId.longValue() <= 0) {
+                        throw new IllegalArgumentException("A lista de pedidos a marcar como lidos e invalida.");
+                    }
+                    ids.add(orderId.longValue());
+                }
+                orderRepository.markAdminNotificationsSeen(ids);
+                sendJson(exchange, 200, Map.of("marked", true));
+                return;
+            }
             if ("/api/admin/users".equals(path) && "GET".equals(method)) {
                 listAdminUsers(exchange, userService);
                 return;
@@ -298,13 +327,52 @@ public final class WebServer {
 
         String paymentMethod = requiredText(body, "paymentMethod", 20);
         String deliveryAddress = requiredText(body, "deliveryAddress", 500);
+        String customerPhone = requiredPhone(body);
+        Boolean cashNeedsChange = null;
+        String cardType = null;
+        BigDecimal cashAmount = null;
+        if ("DINHEIRO".equals(paymentMethod)) {
+            JsonNode needsChange = body.get("cashNeedsChange");
+            if (needsChange == null || !needsChange.isBoolean()) {
+                throw new IllegalArgumentException("Informe se precisa de troco.");
+            }
+            cashNeedsChange = needsChange.booleanValue();
+            if (cashNeedsChange) {
+                JsonNode amount = body.get("cashAmount");
+                if (amount == null || !amount.isNumber()) {
+                    throw new IllegalArgumentException("Informe o valor em dinheiro que sera entregue.");
+                }
+                cashAmount = amount.decimalValue();
+            }
+        } else if ("CARTAO".equals(paymentMethod)) {
+            cardType = requiredText(body, "cardType", 10);
+        }
         JdbcOrderRepository.CreatedOrder order = orderRepository.create(
-                user.getId(), quantities, paymentMethod, deliveryAddress);
+                user.getId(), quantities, paymentMethod, deliveryAddress,
+                customerPhone, cashNeedsChange, cardType, cashAmount);
         sendJson(exchange, 201, Map.of(
                 "id", order.id(),
                 "total", order.total(),
                 "paymentMethod", paymentMethod,
-                "deliveryAddress", deliveryAddress.trim()));
+                "deliveryAddress", deliveryAddress.trim(),
+                "customerPhone", customerPhone,
+                "items", order.items()));
+    }
+
+    private static String requiredPhone(JsonNode body) {
+        String input = requiredText(body, "customerPhone", 30);
+        String digits = input.replaceAll("\\D", "");
+        if (input.startsWith("+55") && digits.startsWith("55")) {
+            digits = digits.substring(2);
+        } else if (digits.startsWith("0055") && (digits.length() == 14 || digits.length() == 15)) {
+            digits = digits.substring(4);
+        } else if ((digits.length() == 12 || digits.length() == 13) && digits.startsWith("55")) {
+            digits = digits.substring(2);
+        }
+        if (digits.length() != 10 && digits.length() != 11) {
+            throw new IllegalArgumentException("Informe um telefone com DDD (10 ou 11 digitos).");
+        }
+        return digits;
     }
 
     private static void manageProducts(HttpExchange exchange, String method, String path,

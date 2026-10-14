@@ -28,11 +28,11 @@ Isso permite acesso somente onde a rede e o firewall permitem; nao configure enc
 
 ## Usar a loja
 
-- Crie uma conta com nome, email, CPF valido e senha de pelo menos 8 caracteres. A conta entra imediatamente; quando o SMTP estiver configurado, o cliente recebe um email de boas-vindas e a loja recebe um aviso do novo cadastro.
-- Configure o envio de emails abaixo para habilitar esses avisos. Sem SMTP, o cadastro e o login continuam funcionando; a interface informa quando as notificacoes nao puderem ser enviadas.
+- Crie uma conta com nome, email, CPF valido e senha de pelo menos 8 caracteres. A conta entra imediatamente.
 - Entre na conta, adicione produtos a sacola e selecione **Finalizar pedido**.
-- Na finalizacao, informe o endereco completo de entrega e escolha PIX, dinheiro ou cartao. A confirmacao salva esses dados junto com o pedido e os itens no H2, usa os precos atuais do banco e abate o estoque dentro de uma unica transacao.
+- Na finalizacao, informe o telefone e o endereco completo de entrega e escolha PIX, dinheiro ou cartao. Para dinheiro, indique se precisa de troco e, se precisar, informe o valor da nota; a loja calcula o troco. Para cartao, escolha debito ou credito. A confirmacao salva esses dados junto com o pedido e os itens no H2, usa os precos atuais do banco e abate o estoque dentro de uma unica transacao.
 - A sacola fica salva no navegador. Os pedidos confirmados aparecem na area da conta.
+- Os pedidos tambem ficam na aba **Pedidos** do painel administrativo. O painel mostra os dados informados pelo cliente e atualiza o contador de novos pedidos periodicamente; a notificacao fica salva no banco mesmo se o administrador estiver desconectado.
 - A forma de pagamento e apenas registrada como preferencia; este prototipo nao cobra pagamentos nem integra servicos externos.
 
 As senhas novas sao armazenadas com hash PBKDF2-HMAC-SHA256 e salt aleatorio. Senhas em texto simples deixadas pela versao anterior do prototipo sao convertidas para hash quando a conta correspondente entrar pela primeira vez.
@@ -50,7 +50,7 @@ $h2 = "$env:USERPROFILE\.m2\repository\com\h2database\h2\2.2.224\h2-2.2.224.jar"
 java -cp $h2 org.h2.tools.Shell -url "jdbc:h2:file:./db/ecommerce" -user sa -sql "UPDATE users SET role = 'ADMIN' WHERE email = 'seu@email.com';"
 ```
 
-Substitua `seu@email.com` pelo email cadastrado. O comando deve informar que uma linha foi atualizada. Inicie novamente com `mvn exec:java` e entre com o email e a senha. O botao **Painel Admin** abre a area exclusiva; use as abas **Produtos** e **Contas** para gerenciar o catalogo e as contas de clientes. Cadastros novos exigem nome, descricao, preco, estoque e uma foto PNG ou JPEG de ate 2 MB. Os produtos e as fotos ficam salvos no banco H2; tambem e possivel editar e excluir produtos, mas produtos incluidos em pedidos existentes nao podem ser excluidos.
+Substitua `seu@email.com` pelo email cadastrado. O comando deve informar que uma linha foi atualizada. Inicie novamente com `mvn exec:java` e entre com o email e a senha. O botao **Painel Admin** abre a area exclusiva; use as abas **Produtos**, **Pedidos** e **Contas** para gerenciar o catalogo, acompanhar pedidos e gerenciar contas de clientes. Cadastros novos exigem nome, descricao, preco, estoque e uma foto PNG ou JPEG de ate 2 MB. Os produtos e as fotos ficam salvos no banco H2; tambem e possivel editar e excluir produtos, mas produtos incluidos em pedidos existentes nao podem ser excluidos.
 
 Clientes tambem podem excluir a propria conta na area **Sua conta**, confirmando a senha. Para preservar a integridade do historico, os pedidos e itens ficam registrados, mas os dados pessoais da conta e os enderecos de entrega sao substituidos por valores anonimos.
 

@@ -123,7 +123,8 @@ public class JdbcUserRepository implements UserRepository {
         try (Connection connection = Database.getConnection()) {
             connection.setAutoCommit(false);
             try (PreparedStatement orders = connection.prepareStatement(
-                         "UPDATE orders SET delivery_address = 'Endereco removido pelo titular' WHERE user_id = ?");
+                         "UPDATE orders SET delivery_address = 'Endereco removido pelo titular', "
+                                 + "customer_phone = NULL WHERE user_id = ?");
                  PreparedStatement user = connection.prepareStatement(
                          "UPDATE users SET username = ?, email = ?, password = ?, cpf = NULL, role = 'CUSTOMER' "
                                  + "WHERE id = ?")) {

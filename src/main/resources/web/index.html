@@ -349,8 +349,19 @@
         .account-tabs button { flex: 1; }
         .account-tabs button[aria-selected="true"] { border-color: var(--blue); background: #14284a; color: #bfdbfe; }
         .admin-tabs { max-width: 420px; }
+        .notification-badge { margin-left: 5px; color: #fda4af; font-weight: 800; }
         .admin-user-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; align-items: center; gap: 14px; padding: 14px; border-bottom: 1px solid var(--line); font-size: 12px; }
         .admin-user-row span { overflow-wrap: anywhere; }
+        .admin-order-card { display: grid; gap: 9px; padding: 16px; border: 1px solid var(--line); border-radius: 13px; background: #0b1220; font-size: 12px; line-height: 1.55; }
+        .admin-order-card h3, .admin-order-card p { margin: 0; }
+        .admin-order-card h3 { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+        .admin-order-card .order-items { margin: 0; padding-left: 19px; color: var(--muted); }
+        .admin-order-card .order-customer { overflow-wrap: anywhere; }
+        .admin-order-card .order-new { color: #fda4af; font-weight: 750; }
+        .payment-details { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; }
+        .payment-details[hidden] { display: none !important; }
+        .payment-details legend { margin-bottom: 1px; color: var(--muted); font-size: 11px; font-weight: 650; }
+        .change-preview { min-height: 17px; margin: 0; color: var(--muted); font-size: 11px; }
         .danger-button { border: 1px solid #7f1d1d; border-radius: 99px; background: #35131a; color: #fecaca; padding: 8px 12px; font-size: 11px; }
         .danger-button:hover { background: #521923; }
         .account-danger-zone { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
@@ -404,6 +415,9 @@
         .payment-options legend { margin-bottom: 8px; color: var(--muted); font-size: 11px; font-weight: 650; }
         .payment-option { display: flex !important; align-items: center; gap: 10px !important; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: #0b1220; color: var(--ink) !important; cursor: pointer; }
         .payment-option input { width: auto; margin: 0; accent-color: #3b82f6; }
+        @media (max-width: 640px) {
+            .admin-order-card h3 { flex-direction: column; gap: 2px; }
+        }
         .payment-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
         .checkout-total { display: flex; justify-content: space-between; padding-top: 13px; border-top: 1px solid var(--line); font-size: 13px; }
 
@@ -516,8 +530,15 @@
             </div>
             <div class="account-tabs admin-tabs" role="tablist" aria-label="Secoes do painel administrativo">
                 <button class="secondary-button" id="admin-products-tab" type="button" aria-selected="true">Produtos</button>
+                <button class="secondary-button" id="admin-orders-tab" type="button" aria-selected="false">Pedidos <span class="notification-badge" id="admin-orders-badge" hidden></span></button>
                 <button class="secondary-button" id="admin-users-tab" type="button" aria-selected="false">Contas</button>
             </div>
+            <section id="admin-orders-panel" hidden>
+                <h2>Pedidos e notificacoes</h2>
+                <p class="payment-note">Os pedidos ficam salvos aqui e incluem os dados de contato, entrega, pagamento e itens.</p>
+                <div class="admin-products" id="admin-orders"></div>
+                <p class="form-message" id="admin-orders-message" role="status"></p>
+            </section>
             <section id="admin-products-panel">
             <form class="form-grid" id="product-form">
                 <input name="id" type="hidden">
@@ -603,6 +624,10 @@
             <button class="icon-button" type="button" data-close="checkout-dialog" aria-label="Fechar">×</button>
         </div>
         <form class="form-grid" id="checkout-form">
+            <label>Telefone para contato
+                <input name="customerPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30"
+                       placeholder="(79) 99999-9999" required>
+            </label>
             <label>Endereco completo de entrega
                 <textarea name="deliveryAddress" maxlength="500" placeholder="Rua, numero, complemento, bairro, cidade, estado e CEP" required></textarea>
             </label>
@@ -611,6 +636,20 @@
                 <label class="payment-option"><input type="radio" name="paymentMethod" value="PIX" required> PIX</label>
                 <label class="payment-option"><input type="radio" name="paymentMethod" value="DINHEIRO" required> Dinheiro</label>
                 <label class="payment-option"><input type="radio" name="paymentMethod" value="CARTAO" required> Cartao</label>
+            </fieldset>
+            <fieldset class="payment-details" id="cash-details" hidden disabled>
+                <legend>Precisa de troco?</legend>
+                <label class="payment-option"><input type="radio" name="cashNeedsChange" value="true"> Sim, preciso de troco</label>
+                <label class="payment-option"><input type="radio" name="cashNeedsChange" value="false"> Nao preciso de troco</label>
+                <label id="cash-amount-label" hidden>Valor da nota que vai entregar (R$)
+                    <input name="cashAmount" type="number" min="0.01" step="0.01" inputmode="decimal" disabled>
+                </label>
+                <p class="change-preview" id="cash-change-preview" aria-live="polite"></p>
+            </fieldset>
+            <fieldset class="payment-details" id="card-details" hidden disabled>
+                <legend>Tipo do cartao</legend>
+                <label class="payment-option"><input type="radio" name="cardType" value="DEBITO"> Debito</label>
+                <label class="payment-option"><input type="radio" name="cardType" value="CREDITO"> Credito</label>
             </fieldset>
             <p class="payment-note">Esta loja apenas registra sua preferencia. Nenhum pagamento e cobrado ou processado online.</p>
             <div class="checkout-total"><span>Total do pedido</span><strong id="checkout-total">R$ 0,00</strong></div>
@@ -626,6 +665,8 @@
         let account = null;
         let cartRestored = false;
         let toastTimer;
+        let adminNotificationTimer;
+        let adminNotificationCount = null;
         const cart = new Map();
         const productGrid = document.getElementById("product-grid");
         const searchInput = document.getElementById("product-search");
@@ -695,13 +736,18 @@
 
         async function setAdminTab(tab) {
             const productsSelected = tab === "products";
+            const ordersSelected = tab === "orders";
             document.getElementById("admin-products-tab").setAttribute("aria-selected", String(productsSelected));
-            document.getElementById("admin-users-tab").setAttribute("aria-selected", String(!productsSelected));
+            document.getElementById("admin-orders-tab").setAttribute("aria-selected", String(ordersSelected));
+            document.getElementById("admin-users-tab").setAttribute("aria-selected", String(!productsSelected && !ordersSelected));
             document.getElementById("admin-products-panel").hidden = !productsSelected;
-            document.getElementById("admin-users-panel").hidden = productsSelected;
+            document.getElementById("admin-orders-panel").hidden = !ordersSelected;
+            document.getElementById("admin-users-panel").hidden = productsSelected || ordersSelected;
             if (productsSelected) {
                 await loadAdminProducts();
                 productForm.elements.name.focus();
+            } else if (ordersSelected) {
+                await loadAdminOrders();
             } else {
                 await loadAdminUsers();
             }
@@ -713,6 +759,17 @@
             document.getElementById("account-open").textContent = account ? account.name : "Entrar";
             document.getElementById("admin-open").hidden = account?.role !== "ADMIN";
             if (account?.role !== "ADMIN") showStoreView();
+            if (account?.role === "ADMIN") {
+                if (!adminNotificationTimer) {
+                    void pollAdminNotifications();
+                    adminNotificationTimer = setInterval(pollAdminNotifications, 15000);
+                }
+            } else {
+                clearInterval(adminNotificationTimer);
+                adminNotificationTimer = null;
+                adminNotificationCount = null;
+                updateAdminNotificationBadge(0);
+            }
             document.getElementById("signed-out-panel").hidden = Boolean(account);
             document.getElementById("signed-in-panel").hidden = !account;
             document.getElementById("account-info").textContent = account
@@ -772,6 +829,51 @@
             return { PIX: "PIX", DINHEIRO: "Dinheiro", CARTAO: "Cartao" }[method] || method;
         }
 
+        function updatePaymentFields() {
+            const method = checkoutForm.elements.paymentMethod.value;
+            const cashDetails = document.getElementById("cash-details");
+            const cardDetails = document.getElementById("card-details");
+            const cashEnabled = method === "DINHEIRO";
+            const cardEnabled = method === "CARTAO";
+            cashDetails.hidden = !cashEnabled;
+            cashDetails.disabled = !cashEnabled;
+            cardDetails.hidden = !cardEnabled;
+            cardDetails.disabled = !cardEnabled;
+
+            const needsChange = checkoutForm.elements.cashNeedsChange.value === "true";
+            const cashAmountLabel = document.getElementById("cash-amount-label");
+            const cashAmount = checkoutForm.elements.cashAmount;
+            cashAmountLabel.hidden = !cashEnabled || !needsChange;
+            cashAmount.disabled = !cashEnabled || !needsChange;
+            cashAmount.required = cashEnabled && needsChange;
+            for (const option of checkoutForm.querySelectorAll('input[name="cashNeedsChange"]')) {
+                option.required = cashEnabled;
+            }
+            for (const option of checkoutForm.querySelectorAll('input[name="cardType"]')) {
+                option.required = cardEnabled;
+            }
+            updateChangePreview();
+        }
+
+        function updateChangePreview() {
+            const input = checkoutForm.elements.cashAmount;
+            const preview = document.getElementById("cash-change-preview");
+            const value = input.value === "" ? NaN : Number(input.value);
+            const total = [...cart.values()].reduce(
+                (sum, item) => sum + item.product.price * item.quantity, 0
+            );
+            if (!input.disabled && Number.isFinite(value) && value > 0 && value < total) {
+                input.setCustomValidity("O valor precisa cobrir o total do pedido.");
+                preview.textContent = "O valor informado precisa ser igual ou maior que o total.";
+            } else if (!input.disabled && Number.isFinite(value) && value >= total && total > 0) {
+                input.setCustomValidity("");
+                preview.textContent = `Troco estimado: ${currency.format(value - total)}.`;
+            } else {
+                input.setCustomValidity("");
+                preview.textContent = "";
+            }
+        }
+
         function renderProducts() {
             const query = searchInput.value.trim().toLocaleLowerCase("pt-BR");
             const filtered = products.filter((product) =>
@@ -816,6 +918,7 @@
             document.getElementById("cart-summary").textContent = `${itemCount} ${itemCount === 1 ? "item" : "itens"}`;
             document.getElementById("cart-total").textContent = currency.format(total);
             document.getElementById("checkout-total").textContent = currency.format(total);
+            updateChangePreview();
 
             const cartItems = document.getElementById("cart-items");
             if (items.length === 0) {
@@ -885,7 +988,15 @@
                     method: "POST",
                     body: JSON.stringify({
                         paymentMethod: formData.get("paymentMethod"),
+                        customerPhone: formData.get("customerPhone"),
                         deliveryAddress: formData.get("deliveryAddress"),
+                        cashNeedsChange: formData.get("paymentMethod") === "DINHEIRO"
+                            ? formData.get("cashNeedsChange") === "true" : null,
+                        cashAmount: formData.get("paymentMethod") === "DINHEIRO"
+                                && formData.get("cashNeedsChange") === "true"
+                            ? Number(formData.get("cashAmount")) : null,
+                        cardType: formData.get("paymentMethod") === "CARTAO"
+                            ? formData.get("cardType") : null,
                         items: [...cart.values()].map(({ product, quantity }) => ({
                             productId: product.id,
                             quantity
@@ -896,7 +1007,7 @@
                 saveCart();
                 checkoutForm.reset();
                 checkoutDialog.close();
-                showToast(`Pedido #${order.id} registrado. Pagamento escolhido: ${paymentMethodLabel(order.paymentMethod)}. Total: ${currency.format(order.total)}.`);
+                showToast(`Pedido #${order.id} registrado. A notificacao com os dados do pedido fica disponivel no painel do administrador.`);
                 try {
                     await loadProducts();
                     await loadOrderHistory();
@@ -911,6 +1022,9 @@
         });
 
         searchInput.addEventListener("input", renderProducts);
+        checkoutForm.addEventListener("change", updatePaymentFields);
+        checkoutForm.elements.cashAmount.addEventListener("input", updateChangePreview);
+        checkoutForm.addEventListener("reset", () => setTimeout(updatePaymentFields, 0));
         document.getElementById("cart-shortcut").addEventListener("click", () =>
             document.getElementById("carrinho").scrollIntoView({ behavior: "smooth", block: "center" })
         );
@@ -923,6 +1037,7 @@
         document.getElementById("admin-open").addEventListener("click", showAdminView);
         document.getElementById("store-open").addEventListener("click", showStoreView);
         document.getElementById("admin-products-tab").addEventListener("click", () => setAdminTab("products"));
+        document.getElementById("admin-orders-tab").addEventListener("click", () => setAdminTab("orders"));
         document.getElementById("admin-users-tab").addEventListener("click", () => setAdminTab("users"));
         document.getElementById("login-tab").addEventListener("click", () => setAccountTab("login"));
         document.getElementById("register-tab").addEventListener("click", () => setAccountTab("register"));
@@ -1055,6 +1170,80 @@
             }
         }
 
+        function updateAdminNotificationBadge(count) {
+            const badge = document.getElementById("admin-orders-badge");
+            badge.textContent = count > 99 ? "99+" : String(count);
+            badge.hidden = count === 0;
+            document.getElementById("admin-orders-tab").setAttribute(
+                "aria-label", count ? `Pedidos, ${count} notificacoes novas` : "Pedidos"
+            );
+        }
+
+        async function pollAdminNotifications() {
+            if (account?.role !== "ADMIN") return;
+            try {
+                const result = await api("/api/admin/orders/unread-count");
+                const count = Number(result.count);
+                if (adminNotificationCount !== null && count > adminNotificationCount) {
+                    showToast("Novo pedido recebido. Abra a aba Pedidos no painel do administrador.");
+                    if (!document.getElementById("admin-orders-panel").hidden) {
+                        await loadAdminOrders();
+                    }
+                }
+                adminNotificationCount = count;
+                updateAdminNotificationBadge(count);
+            } catch (error) {
+                const message = document.getElementById("admin-orders-message");
+                if (!document.getElementById("admin-orders-panel").hidden) {
+                    message.textContent = `Nao foi possivel atualizar as notificacoes: ${error.message}`;
+                }
+            }
+        }
+
+        async function loadAdminOrders() {
+            const list = document.getElementById("admin-orders");
+            const message = document.getElementById("admin-orders-message");
+            message.textContent = "";
+            try {
+                const orders = await api("/api/admin/orders");
+                list.innerHTML = orders.length ? orders.map((order) => {
+                    const paymentDetails = order.paymentMethod === "DINHEIRO"
+                        ? (order.cashNeedsChange
+                            ? `Precisa de troco para ${currency.format(order.cashAmount)} · troco ${currency.format(order.changeDue)}`
+                            : "Nao precisa de troco")
+                        : order.paymentMethod === "CARTAO"
+                            ? (order.cardType === "DEBITO" ? "Debito" : "Credito")
+                            : "";
+                    return `
+                        <article class="admin-order-card">
+                            <h3>
+                                <span>Pedido #${order.id}${order.notificationPending ? ' <span class="order-new">NOVO</span>' : ""}</span>
+                                <span>${currency.format(order.total)}</span>
+                            </h3>
+                            <p><strong>Recebido:</strong> ${escapeHtml(new Date(order.createdAt).toLocaleString("pt-BR"))}</p>
+                            <p class="order-customer"><strong>Cliente:</strong> ${escapeHtml(order.customerName)} · ${escapeHtml(order.customerEmail)} · Telefone: ${escapeHtml(order.customerPhone || "nao informado")}</p>
+                            <p><strong>Entrega:</strong> ${escapeHtml(order.deliveryAddress)}</p>
+                            <p><strong>Pagamento:</strong> ${escapeHtml(paymentMethodLabel(order.paymentMethod))}${paymentDetails ? ` · ${escapeHtml(paymentDetails)}` : ""}</p>
+                            <ul class="order-items">${order.items.map((item) => `
+                                <li>${escapeHtml(item.name)} · ${item.quantity} x ${currency.format(item.unitPrice)} = ${currency.format(item.subtotal)}</li>`
+                            ).join("")}</ul>
+                        </article>`;
+                }).join("") : '<p class="form-message">Ainda nao ha pedidos.</p>';
+                const pendingIds = orders.filter((order) => order.notificationPending).map((order) => order.id);
+                if (pendingIds.length) {
+                    await api("/api/admin/orders/mark-seen", {
+                        method: "POST",
+                        body: JSON.stringify({ orderIds: pendingIds })
+                    });
+                    adminNotificationCount = Math.max(0, (adminNotificationCount || 0) - pendingIds.length);
+                    updateAdminNotificationBadge(adminNotificationCount);
+                }
+            } catch (error) {
+                message.textContent = error.message;
+                list.replaceChildren();
+            }
+        }
+
         function resetProductForm() {
             productForm.reset();
             productForm.elements.id.value = "";
@@ -1175,6 +1364,7 @@
         Promise.all([loadProducts(), refreshAccount()]).catch((error) => {
             productGrid.innerHTML = `<p class="status-message">${escapeHtml(error.message)} Atualize a pagina para tentar novamente.</p>`;
         });
+        updatePaymentFields();
     </script>
 </body>
 </html>
